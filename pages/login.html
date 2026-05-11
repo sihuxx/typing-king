@@ -47,12 +47,6 @@
         </button>
       </form>
 
-      <div class="divider-or">OR</div>
-
-      <button class="btn btn-google" id="btnGoogle">
-        <span style="font-size:14px;">G</span> GOOGLE 로 계속하기
-      </button>
-
       <p style="margin-top: 20px; font-size: 11px; color: var(--text-faint); text-align: center; letter-spacing: 1px;">
         로그인 없이도 게임은 플레이할 수 있어요<br>
         <a href="../index.html" style="color: var(--text-dim); text-decoration: underline;">게스트로 시작 →</a>
@@ -133,12 +127,7 @@ $('authForm').addEventListener('submit', async e => {
   }
 });
 
-$('btnGoogle').addEventListener('click', async () => {
-  const { error } = await Auth.signInWithGoogle();
-  if (error) {
-    $('formError').textContent = 'Google 로그인 실패: ' + error.message;
-  }
-});
+
 </script>
 </body>
 </html>

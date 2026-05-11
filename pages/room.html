@@ -134,6 +134,7 @@ let state = {
   isHost: false,
   myProgress: 0,
   friendProgress: 0,
+  friendWpm: 0,
   text: '',
   typed: '',
   startTime: null,
@@ -275,6 +276,7 @@ function handleRoomUpdate(payload) {
     const friendProgress = state.isHost ? newRoom.guest_progress : newRoom.host_progress;
     const friendWpm = state.isHost ? newRoom.guest_wpm : newRoom.host_wpm;
     state.friendProgress = friendProgress / 100;
+    state.friendWpm = friendWpm; // 최신 상대 WPM 항상 추적
     updateLaneUI();
     $('statFriendWpm').innerHTML = `${friendWpm}<span class="stat-unit">w / m</span>`;
 
@@ -517,8 +519,8 @@ async function finish(verdict) {
     }
   }
 
-  // 결과 표시
-  const friendWpm = state.isHost ? state.room.guest_wpm : state.room.host_wpm;
+  // 결과 표시 (state.friendWpm 은 Realtime 으로 지속 업데이트된 최신값)
+  const friendWpm = state.friendWpm || (state.isHost ? state.room.guest_wpm : state.room.host_wpm) || 0;
   const friendName = state.isHost ? state.room.guest_nickname : state.room.host_nickname;
   const myName = state.isHost ? state.room.host_nickname : state.room.guest_nickname;
 
@@ -530,7 +532,7 @@ async function finish(verdict) {
   $('resultMeWpm').textContent = myWpm;
   $('resultMeAcc').textContent = myAcc + '%';
   $('resultFriendName').textContent = friendName;
-  $('resultFriendWpm').textContent = friendWpm || 0;
+  $('resultFriendWpm').textContent = friendWpm;
   $('resultOverlay').classList.add('show');
 }
 
