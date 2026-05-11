@@ -294,14 +294,21 @@ function handleRoomUpdate(payload) {
 $('btnStart').addEventListener('click', async () => {
   if (!state.isHost) return;
   $('btnStart').disabled = true;
+
   const { error } = await window.sb
     .from('rooms')
     .update({ status: 'playing', started_at: new Date().toISOString() })
     .eq('code', ROOM_CODE);
+
   if (error) {
     alert('시작 실패: ' + error.message);
     $('btnStart').disabled = false;
+    return;
   }
+
+  // host 는 Realtime 이벤트를 못 받는 경우가 있으므로 직접 startGame() 호출
+  state.room.status = 'playing';
+  startGame();
 });
 
 function startGame() {
