@@ -1,5 +1,6 @@
 // ============================================
 // AUTH 헬퍼 — 로그인 상태 관리, 헤더 UI
+// (트리거 방식: profile 은 DB에서 자동 생성)
 // ============================================
 
 const Auth = {
@@ -30,15 +31,15 @@ const Auth = {
   },
 
   async signUp(email, password, nickname) {
-    const { data, error } = await window.sb.auth.signUp({ email, password });
-    if (error) return { error };
-    if (data.user) {
-      const { error: profileError } = await window.sb
-        .from('profiles')
-        .insert({ id: data.user.id, nickname });
-      if (profileError) return { error: profileError };
-    }
-    return { data };
+    // 닉네임을 user metadata 로 전달 → DB 트리거가 자동으로 profile 생성
+    const { data, error } = await window.sb.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { nickname: nickname }
+      }
+    });
+    return { data, error };
   },
 
   async signIn(email, password) {
@@ -105,7 +106,6 @@ async function initHeader(activePage) {
   if (header) {
     header.innerHTML = renderHeader(activePage);
 
-    // 로그아웃 버튼
     const logoutBtn = document.getElementById('btnLogout');
     if (logoutBtn) {
       logoutBtn.addEventListener('click', e => {
@@ -114,7 +114,6 @@ async function initHeader(activePage) {
       });
     }
 
-    // 테마 토글
     initThemeToggle();
   }
 }
