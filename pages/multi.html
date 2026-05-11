@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>멀티플레이 — TYPING.KING</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Bungee&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../css/style.css" />
+<style>
+.lobby-wrap { max-width: 720px; margin: 40px auto 0; }
+.lobby-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 32px; }
+.lobby-card { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 32px; position: relative; }
+.lobby-card::before { content: ''; position: absolute; top: -1px; left: 24px; background: var(--bg); padding: 0 12px; font-size: 10px; letter-spacing: 3px; transform: translateY(-50%); }
+.lobby-card.create::before { content: '◇ CREATE'; color: var(--neon); }
+.lobby-card.join::before { content: '◈ JOIN'; color: var(--pink); }
+.lobby-icon { font-family: var(--display); font-size: 48px; color: var(--neon); text-shadow: 0 0 16px var(--neon-glow); margin-bottom: 16px; line-height: 1; }
+.lobby-card.join .lobby-icon { color: var(--pink); text-shadow: 0 0 16px var(--pink-glow); }
+.lobby-title { font-family: var(--display); font-size: 20px; letter-spacing: 2px; margin-bottom: 6px; }
+.lobby-sub { font-size: 12px; color: var(--text-dim); margin-bottom: 24px; line-height: 1.6; letter-spacing: 0.5px; }
+.code-input { font-family: var(--mono); font-size: 24px; letter-spacing: 4px; text-align: center; text-transform: uppercase; padding: 14px; width: 100%; }
+@media (max-width: 640px) { .lobby-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body data-theme="dark">
+
+<div class="container">
+  <header class="header" id="header"></header>
+
+  <div class="lobby-wrap">
+    <h1 class="page-title" style="text-align:center;">MULTIPLAYER</h1>
+    <p class="page-subtitle" style="text-align:center;">친구와 1:1 타자 대결</p>
+
+    <div class="lobby-grid">
+      <div class="lobby-card create">
+        <div class="lobby-icon">◇</div>
+        <h2 class="lobby-title">방 만들기</h2>
+        <p class="lobby-sub">새 방을 만들고 코드를 친구에게 공유하세요</p>
+        <button class="btn primary" id="btnCreate" style="width:100%; justify-content:center;">
+          <span class="arrow">+</span> CREATE ROOM
+        </button>
+      </div>
+
+      <div class="lobby-card join">
+        <div class="lobby-icon">◈</div>
+        <h2 class="lobby-title">방 입장</h2>
+        <p class="lobby-sub">친구에게 받은 6자리 코드를 입력하세요</p>
+        <input type="text" class="form-input code-input" id="codeInput" placeholder="ABC123" maxlength="6" />
+        <button class="btn pink" id="btnJoin" style="width:100%; justify-content:center; margin-top: 12px;">
+          <span class="arrow">→</span> JOIN ROOM
+        </button>
+      </div>
+    </div>
+
+    <div id="errorMsg" style="text-align:center; color: var(--red); font-size: 13px; min-height: 20px; margin-bottom: 24px; letter-spacing: 0.5px;"></div>
+
+    <div style="text-align:center;">
+      <a href="../index.html" class="btn"><span class="arrow">←</span> 메인으로</a>
+    </div>
+  </div>
+
+  <footer class="footer">TYPING.KING &nbsp;·&nbsp; 1V1 MULTIPLAYER</footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/supabase.js"></script>
+<script src="../js/auth.js"></script>
+
+<script>
+const SENTENCES = [
+  '시작은 새로운 것을 시도할 용기를 가진 자에게만 허락된다.',
+  '꿈을 향해 자신 있게 나아가고 상상해 온 삶을 살아라.',
+  '가장 큰 영광은 한 번도 실패하지 않음이 아니라 실패할 때마다 다시 일어서는 데에 있다.',
+  '오늘 할 수 있는 일에 전력을 다하라. 그러면 내일은 한 걸음 더 진보할 것이다.',
+  '인생은 자전거와 같다. 균형을 잡으려면 계속 움직여야 한다.',
+  '천 리 길도 한 걸음부터라는 말처럼 작은 시작이 큰 결과를 만든다.',
+  '바람이 부는 언덕에서 빨간 풍선 하나가 하늘 높이 떠올랐다 사라졌다.',
+  '카페에서 마신 따뜻한 아메리카노 한 잔이 오늘 하루의 피로를 녹여 주었다.',
+  '주말 오후 공원에서 강아지와 산책하는 시간이 가장 행복한 순간이다.',
+  '책장에 꽂혀 있던 오래된 일기장을 펼치자 잊고 있던 추억이 쏟아져 나왔다.',
+  '비 오는 날 창가에 앉아 빗소리를 듣는 것만큼 평화로운 일은 없다.'
+];
+
+const $ = id => document.getElementById(id);
+
+(async function init() {
+  await initHeader('multi');
+  if (!Auth.isLoggedIn()) {
+    $('errorMsg').textContent = '로그인이 필요합니다';
+    setTimeout(() => window.location.href = 'login.html', 1200);
+    return;
+  }
+})();
+
+function generateRoomCode() {
+  // 헷갈리는 글자(0, O, I, 1) 제외
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code;
+}
+
+$('btnCreate').addEventListener('click', async () => {
+  $('errorMsg').textContent = '';
+  $('btnCreate').disabled = true;
+
+  const sentence = SENTENCES[Math.floor(Math.random() * SENTENCES.length)];
+  let code, attempts = 0;
+  let success = false;
+
+  // 코드 중복 방지 (최대 5회 시도)
+  while (attempts < 5 && !success) {
+    code = generateRoomCode();
+    const { error } = await window.sb.from('rooms').insert({
+      code: code,
+      host_id: Auth.user.id,
+      host_nickname: Auth.profile?.nickname || '익명',
+      sentence: sentence,
+      status: 'waiting'
+    });
+    if (!error) {
+      success = true;
+    } else if (error.code === '23505') {
+      attempts++;
+    } else {
+      $('errorMsg').textContent = '방 생성 실패: ' + error.message;
+      $('btnCreate').disabled = false;
+      return;
+    }
+  }
+
+  if (!success) {
+    $('errorMsg').textContent = '방 생성에 실패했습니다. 다시 시도해주세요.';
+    $('btnCreate').disabled = false;
+    return;
+  }
+
+  window.location.href = `room.html?code=${code}`;
+});
+
+$('btnJoin').addEventListener('click', async () => {
+  await joinRoom();
+});
+
+$('codeInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') joinRoom();
+});
+
+$('codeInput').addEventListener('input', e => {
+  e.target.value = e.target.value.toUpperCase();
+});
+
+async function joinRoom() {
+  const code = $('codeInput').value.trim().toUpperCase();
+  $('errorMsg').textContent = '';
+
+  if (code.length !== 6) {
+    $('errorMsg').textContent = '6자리 코드를 입력해주세요';
+    return;
+  }
+
+  $('btnJoin').disabled = true;
+  const { data: room, error } = await window.sb
+    .from('rooms')
+    .select('*')
+    .eq('code', code)
+    .single();
+
+  if (error || !room) {
+    $('errorMsg').textContent = '존재하지 않는 방입니다';
+    $('btnJoin').disabled = false;
+    return;
+  }
+
+  if (room.status !== 'waiting') {
+    $('errorMsg').textContent = '이미 시작되었거나 종료된 방입니다';
+    $('btnJoin').disabled = false;
+    return;
+  }
+
+  if (room.host_id === Auth.user.id) {
+    // 본인이 만든 방으로 그냥 입장
+    window.location.href = `room.html?code=${code}`;
+    return;
+  }
+
+  if (room.guest_id && room.guest_id !== Auth.user.id) {
+    $('errorMsg').textContent = '방이 가득 찼습니다';
+    $('btnJoin').disabled = false;
+    return;
+  }
+
+  // guest 등록
+  const { error: updateError } = await window.sb
+    .from('rooms')
+    .update({
+      guest_id: Auth.user.id,
+      guest_nickname: Auth.profile?.nickname || '익명'
+    })
+    .eq('code', code);
+
+  if (updateError) {
+    $('errorMsg').textContent = '입장 실패: ' + updateError.message;
+    $('btnJoin').disabled = false;
+    return;
+  }
+
+  window.location.href = `room.html?code=${code}`;
+}
+</script>
+</body>
+</html>

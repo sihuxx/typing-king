@@ -1,6 +1,6 @@
 // ============================================
 // AUTH 헬퍼 — 로그인 상태 관리, 헤더 UI
-// (트리거 방식: profile 은 DB에서 자동 생성)
+// (멀티플레이 메뉴 추가 버전)
 // ============================================
 
 const Auth = {
@@ -31,7 +31,6 @@ const Auth = {
   },
 
   async signUp(email, password, nickname) {
-    // 닉네임을 user metadata 로 전달 → DB 트리거가 자동으로 profile 생성
     const { data, error } = await window.sb.auth.signUp({
       email,
       password,
@@ -78,7 +77,6 @@ function renderHeader(activePage = 'play') {
   const isLoggedIn = Auth.isLoggedIn();
   const nickname = Auth.profile?.nickname || 'GUEST';
 
-  // pages/ 폴더 안인지 감지하여 경로 접두사 결정
   const inPages = window.location.pathname.includes('/pages/');
   const root = inPages ? '../' : '';
   const pages = inPages ? '' : 'pages/';
@@ -87,6 +85,7 @@ function renderHeader(activePage = 'play') {
     <a href="${root}index.html" class="logo">TYPING.KING</a>
     <nav class="nav">
       <a href="${root}index.html" class="${activePage === 'play' ? 'active' : ''}">PLAY</a>
+      ${isLoggedIn ? `<a href="${pages}multi.html" class="${activePage === 'multi' ? 'active' : ''}">MULTI</a>` : ''}
       <a href="${pages}ranking.html" class="${activePage === 'ranking' ? 'active' : ''}">RANKING</a>
       ${isLoggedIn ? `<a href="${pages}mypage.html" class="${activePage === 'mypage' ? 'active' : ''}">MY PAGE</a>` : ''}
     </nav>

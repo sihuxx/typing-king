@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>방 — TYPING.KING</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Bungee&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../css/style.css" />
+<style>
+.room-header { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 24px 32px; margin-bottom: 20px; position: relative; }
+.room-header::before { content: '◆ ROOM'; position: absolute; top: -1px; left: 24px; background: var(--bg); color: var(--neon); padding: 0 12px; font-size: 10px; letter-spacing: 3px; transform: translateY(-50%); }
+.room-code-block { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+.room-code { font-family: var(--display); font-size: 40px; letter-spacing: 8px; color: var(--neon); text-shadow: 0 0 16px var(--neon-glow); }
+.room-info { font-size: 12px; color: var(--text-dim); letter-spacing: 1px; line-height: 1.8; }
+.btn-copy { padding: 8px 16px; font-size: 11px; }
+.players-box { display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: center; margin-top: 20px; padding-top: 20px; border-top: 1px dashed var(--border); }
+.player-slot { text-align: center; padding: 12px; border-radius: 4px; }
+.player-slot.host { background: var(--neon-soft); border: 1px solid var(--neon); }
+.player-slot.guest { background: var(--pink-glow); border: 1px solid var(--pink); }
+.player-slot.empty { background: var(--panel-light); border: 1px dashed var(--border); color: var(--text-faint); }
+.player-name { font-family: var(--mono); font-weight: 700; font-size: 14px; letter-spacing: 1px; margin-bottom: 4px; }
+.player-role { font-size: 10px; letter-spacing: 2px; color: var(--text-dim); text-transform: uppercase; }
+.vs-mid { font-family: var(--display); font-size: 24px; color: var(--text-faint); letter-spacing: 2px; }
+.waiting-msg { text-align: center; padding: 16px; font-size: 13px; color: var(--text-dim); letter-spacing: 1px; }
+.waiting-dots::after { content: '...'; animation: dots 1.5s steps(4, end) infinite; }
+@keyframes dots { 0%, 20% { content: ''; } 40% { content: '.'; } 60% { content: '..'; } 80%, 100% { content: '...'; } }
+@media (max-width: 640px) {
+  .room-code { font-size: 28px; letter-spacing: 4px; }
+  .players-box { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body data-theme="dark">
+
+<div class="container">
+  <header class="header" id="header"></header>
+
+  <div class="room-header" id="roomHeader">
+    <div class="room-code-block">
+      <div>
+        <div class="room-info">방 코드 — 친구에게 공유</div>
+        <div class="room-code" id="roomCode">------</div>
+      </div>
+      <button class="btn" id="btnCopy"><span class="arrow">⎘</span> 코드 복사</button>
+    </div>
+
+    <div class="players-box">
+      <div class="player-slot host" id="hostSlot">
+        <div class="player-name" id="hostName">—</div>
+        <div class="player-role">HOST · 방장</div>
+      </div>
+      <div class="vs-mid">VS</div>
+      <div class="player-slot empty" id="guestSlot">
+        <div class="player-name" id="guestName">대기 중<span class="waiting-dots"></span></div>
+        <div class="player-role">GUEST</div>
+      </div>
+    </div>
+
+    <div class="waiting-msg" id="waitingMsg">친구가 입장하면 자동으로 시작할 수 있어요</div>
+  </div>
+
+  <div class="race-track" id="raceTrack" style="display:none;">
+    <div class="lane">
+      <div class="lane-label you" id="lane1Label">YOU ▶</div>
+      <div class="lane-bar"><div class="lane-fill" id="lane1Fill" style="--lane-color: var(--neon)"></div><div class="lane-runner" id="lane1Runner" style="--lane-color: var(--neon)">U</div></div>
+      <div class="lane-pct you" id="lane1Pct">0%</div>
+    </div>
+    <div class="lane">
+      <div class="lane-label bot" id="lane2Label" style="--lane-color: var(--pink)">◀ FRIEND</div>
+      <div class="lane-bar"><div class="lane-fill" id="lane2Fill" style="--lane-color: var(--pink)"></div><div class="lane-runner" id="lane2Runner" style="--lane-color: var(--pink)">F</div></div>
+      <div class="lane-pct bot" id="lane2Pct" style="--lane-color: var(--pink)">0%</div>
+    </div>
+  </div>
+
+  <div class="hud" id="hud" style="display:none;">
+    <div class="stat neon"><div class="stat-label">YOUR WPM</div><div class="stat-value" id="statWpm">0<span class="stat-unit">w / m</span></div></div>
+    <div class="stat pink"><div class="stat-label">ACCURACY</div><div class="stat-value" id="statAcc">100<span class="stat-unit">%</span></div></div>
+    <div class="stat amber"><div class="stat-label">FRIEND WPM</div><div class="stat-value" id="statFriendWpm">0<span class="stat-unit">w / m</span></div></div>
+    <div class="stat blue"><div class="stat-label">TIME</div><div class="stat-value" id="statTime">0<span class="stat-unit">s</span></div></div>
+  </div>
+
+  <div class="typing-card" id="typingCard" tabindex="0" style="display:none;">
+    <div class="prompt-text" id="promptText"></div>
+    <input type="text" class="input-capture" id="hiddenInput" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
+  </div>
+
+  <div class="controls">
+    <button class="btn primary" id="btnStart" style="display:none;"><span class="arrow">▶</span> START BATTLE</button>
+    <button class="btn" id="btnLeave"><span class="arrow">✕</span> 방 나가기</button>
+  </div>
+
+  <footer class="footer">TYPING.KING &nbsp;·&nbsp; 1V1 ROOM</footer>
+</div>
+
+<div class="countdown" id="countdown"><div class="countdown-num" id="countdownNum">3</div></div>
+
+<div class="result-overlay" id="resultOverlay">
+  <div class="result-card" id="resultCard">
+    <div class="result-verdict" id="resultVerdict">VICTORY</div>
+    <div class="result-label" id="resultLabel">friendly match</div>
+    <div class="result-vs">
+      <div class="result-player">
+        <div class="result-player-name" id="resultMeName">YOU</div>
+        <div class="result-player-wpm" id="resultMeWpm">0</div>
+        <div class="result-player-acc"><span id="resultMeAcc">0%</span> 정확도</div>
+      </div>
+      <div class="result-vs-mid">VS</div>
+      <div class="result-player bot">
+        <div class="result-player-name" id="resultFriendName">FRIEND</div>
+        <div class="result-player-wpm" id="resultFriendWpm">0</div>
+        <div class="result-player-acc">상대 WPM</div>
+      </div>
+    </div>
+    <div class="result-actions">
+      <button class="btn primary" id="btnRematch"><span class="arrow">↻</span> 새 방 만들기</button>
+      <button class="btn" id="btnHome">✕ 메인으로</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/supabase.js"></script>
+<script src="../js/auth.js"></script>
+
+<script>
+const $ = id => document.getElementById(id);
+const params = new URLSearchParams(window.location.search);
+const ROOM_CODE = params.get('code');
+
+let state = {
+  room: null,
+  isHost: false,
+  myProgress: 0,
+  friendProgress: 0,
+  text: '',
+  typed: '',
+  startTime: null,
+  endTime: null,
+  errors: 0,
+  totalKeys: 0,
+  correctKeys: 0,
+  isRunning: false,
+  isFinished: false,
+  ticker: null,
+  updateThrottle: 0,
+  channel: null,
+  matchSaved: false
+};
+
+(async function init() {
+  await initHeader('multi');
+
+  if (!ROOM_CODE) {
+    alert('잘못된 접근입니다');
+    window.location.href = 'multi.html';
+    return;
+  }
+
+  if (!Auth.isLoggedIn()) {
+    alert('로그인이 필요합니다');
+    window.location.href = 'login.html';
+    return;
+  }
+
+  await loadRoom();
+  if (!state.room) return;
+
+  setupRealtime();
+  renderRoomInfo();
+})();
+
+async function loadRoom() {
+  const { data, error } = await window.sb
+    .from('rooms')
+    .select('*')
+    .eq('code', ROOM_CODE)
+    .single();
+
+  if (error || !data) {
+    alert('방을 찾을 수 없습니다');
+    window.location.href = 'multi.html';
+    return;
+  }
+
+  state.room = data;
+  state.text = data.sentence;
+  state.isHost = data.host_id === Auth.user.id;
+
+  // host도 guest도 아닌 외부인이 URL로 들어온 경우 처리
+  if (!state.isHost && data.guest_id !== Auth.user.id) {
+    if (data.guest_id) {
+      alert('방이 가득 찼습니다');
+      window.location.href = 'multi.html';
+      return;
+    }
+    // 자동으로 guest 자리 차지
+    const { error: joinError } = await window.sb
+      .from('rooms')
+      .update({
+        guest_id: Auth.user.id,
+        guest_nickname: Auth.profile?.nickname || '익명'
+      })
+      .eq('code', ROOM_CODE);
+    if (joinError) {
+      alert('입장 실패: ' + joinError.message);
+      window.location.href = 'multi.html';
+      return;
+    }
+    state.room.guest_id = Auth.user.id;
+    state.room.guest_nickname = Auth.profile?.nickname || '익명';
+  }
+}
+
+function renderRoomInfo() {
+  $('roomCode').textContent = state.room.code;
+  $('hostName').textContent = state.room.host_nickname;
+  if (state.room.guest_id) {
+    $('guestSlot').classList.remove('empty');
+    $('guestSlot').classList.add('guest');
+    $('guestName').innerHTML = state.room.guest_nickname;
+  }
+
+  // host 이고 guest 가 있으면 START 버튼 표시
+  if (state.isHost && state.room.guest_id && state.room.status === 'waiting') {
+    $('btnStart').style.display = 'inline-flex';
+    $('waitingMsg').textContent = '✓ 친구가 입장했습니다. START 를 눌러 시작하세요';
+  } else if (!state.isHost && state.room.status === 'waiting') {
+    $('waitingMsg').textContent = '방장이 시작하기를 기다리는 중...';
+  } else if (!state.room.guest_id) {
+    $('waitingMsg').textContent = '친구가 입장하면 자동으로 시작할 수 있어요';
+  }
+
+  // playing 상태면 즉시 게임 화면으로
+  if (state.room.status === 'playing') {
+    startGame();
+  }
+}
+
+function setupRealtime() {
+  state.channel = window.sb
+    .channel('room-' + ROOM_CODE)
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `code=eq.${ROOM_CODE}` },
+      handleRoomUpdate
+    )
+    .subscribe();
+}
+
+function handleRoomUpdate(payload) {
+  const newRoom = payload.new;
+  const oldStatus = state.room.status;
+  state.room = newRoom;
+
+  // guest 입장 감지
+  if (newRoom.guest_id && !$('guestSlot').classList.contains('guest')) {
+    $('guestSlot').classList.remove('empty');
+    $('guestSlot').classList.add('guest');
+    $('guestName').innerHTML = newRoom.guest_nickname;
+    if (state.isHost) {
+      $('btnStart').style.display = 'inline-flex';
+      $('waitingMsg').textContent = '✓ 친구가 입장했습니다. START 를 눌러 시작하세요';
+    }
+  }
+
+  // 상태 변경
+  if (oldStatus === 'waiting' && newRoom.status === 'playing') {
+    startGame();
+  }
+
+  // 게임 중 상대방 진행률 업데이트
+  if (state.isRunning) {
+    const friendProgress = state.isHost ? newRoom.guest_progress : newRoom.host_progress;
+    const friendWpm = state.isHost ? newRoom.guest_wpm : newRoom.host_wpm;
+    state.friendProgress = friendProgress / 100;
+    updateLaneUI();
+    $('statFriendWpm').innerHTML = `${friendWpm}<span class="stat-unit">w / m</span>`;
+
+    // 상대가 100% 도달했으면 패배
+    if (friendProgress >= 100 && !state.isFinished) {
+      finish('lose');
+    }
+  }
+
+  // 종료 처리
+  if (newRoom.status === 'finished' && !state.isFinished) {
+    finish(newRoom.winner === (state.isHost ? 'host' : 'guest') ? 'win' : 'lose');
+  }
+}
+
+// ============ START GAME ============
+$('btnStart').addEventListener('click', async () => {
+  if (!state.isHost) return;
+  $('btnStart').disabled = true;
+  const { error } = await window.sb
+    .from('rooms')
+    .update({ status: 'playing', started_at: new Date().toISOString() })
+    .eq('code', ROOM_CODE);
+  if (error) {
+    alert('시작 실패: ' + error.message);
+    $('btnStart').disabled = false;
+  }
+});
+
+function startGame() {
+  $('btnStart').style.display = 'none';
+  $('waitingMsg').textContent = '';
+  $('roomHeader').style.display = 'none';
+  $('raceTrack').style.display = 'block';
+  $('hud').style.display = 'grid';
+  $('typingCard').style.display = 'block';
+
+  // 라벨 설정
+  const myName = state.isHost ? state.room.host_nickname : state.room.guest_nickname;
+  const friendName = state.isHost ? state.room.guest_nickname : state.room.host_nickname;
+  $('lane1Label').textContent = `${myName.slice(0,8)} ▶`;
+  $('lane2Label').textContent = `◀ ${friendName.slice(0,8)}`;
+  $('lane1Runner').textContent = myName.charAt(0).toUpperCase();
+  $('lane2Runner').textContent = friendName.charAt(0).toUpperCase();
+
+  renderPrompt();
+  startCountdown();
+}
+
+function startCountdown() {
+  const countdownEl = $('countdown');
+  const countdownNum = $('countdownNum');
+  countdownEl.classList.add('show');
+  let count = 3;
+  countdownNum.textContent = count;
+  countdownNum.style.animation = 'none';
+  void countdownNum.offsetWidth;
+  countdownNum.style.animation = 'countPop 1s ease-out';
+
+  const timer = setInterval(() => {
+    count--;
+    if (count > 0) {
+      countdownNum.textContent = count;
+      countdownNum.style.animation = 'none';
+      void countdownNum.offsetWidth;
+      countdownNum.style.animation = 'countPop 1s ease-out';
+    } else if (count === 0) {
+      countdownNum.textContent = 'GO!';
+      countdownNum.style.animation = 'none';
+      void countdownNum.offsetWidth;
+      countdownNum.style.animation = 'countPop 0.6s ease-out';
+    } else {
+      clearInterval(timer);
+      countdownEl.classList.remove('show');
+      beginRace();
+    }
+  }, 1000);
+}
+
+function beginRace() {
+  state.isRunning = true;
+  state.startTime = Date.now();
+  $('typingCard').classList.add('focused');
+  $('hiddenInput').focus();
+  state.ticker = setInterval(() => {
+    updateLocalProgress();
+    updateLaneUI();
+    updateHUD();
+  }, 100);
+}
+
+// ============ TYPING LOGIC ============
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+function renderPrompt() {
+  const chars = state.text.split('');
+  const typed = state.typed;
+  let html = '';
+  for (let i = 0; i < chars.length; i++) {
+    const ch = chars[i];
+    let cls = 'char';
+    if (i < typed.length) cls += typed[i] === ch ? ' correct' : ' wrong';
+    else if (i === typed.length) cls += ' current';
+    const display = ch === ' ' ? '&nbsp;' : escapeHtml(ch);
+    html += `<span class="${cls}">${display}</span>`;
+  }
+  $('promptText').innerHTML = html;
+}
+
+function calcWpm() {
+  if (!state.startTime) return 0;
+  const elapsedMs = (state.endTime || Date.now()) - state.startTime;
+  const elapsedMin = elapsedMs / 60000;
+  if (elapsedMin <= 0) return 0;
+  return Math.round((state.correctKeys / 5) / elapsedMin);
+}
+
+function calcAccuracy() {
+  if (state.totalKeys === 0) return 100;
+  return Math.round((state.correctKeys / state.totalKeys) * 100);
+}
+
+function updateLocalProgress() {
+  state.myProgress = Math.min(1, state.typed.length / state.text.length);
+}
+
+function updateLaneUI() {
+  const myPct = state.myProgress * 100;
+  const friendPct = state.friendProgress * 100;
+  $('lane1Fill').style.width = myPct + '%';
+  $('lane1Runner').style.left = myPct + '%';
+  $('lane1Pct').textContent = Math.round(myPct) + '%';
+  $('lane2Fill').style.width = friendPct + '%';
+  $('lane2Runner').style.left = friendPct + '%';
+  $('lane2Pct').textContent = Math.round(friendPct) + '%';
+}
+
+function updateHUD() {
+  $('statWpm').innerHTML = `${calcWpm()}<span class="stat-unit">w / m</span>`;
+  $('statAcc').innerHTML = `${calcAccuracy()}<span class="stat-unit">%</span>`;
+  const elapsed = state.startTime ? Math.floor((Date.now() - state.startTime) / 1000) : 0;
+  $('statTime').innerHTML = `${elapsed}<span class="stat-unit">s</span>`;
+}
+
+// 진행률 서버에 동기화 (throttle: 250ms 간격)
+async function syncProgress() {
+  const now = Date.now();
+  if (now - state.updateThrottle < 250) return;
+  state.updateThrottle = now;
+
+  const myProgressInt = Math.round(state.myProgress * 100);
+  const myWpm = calcWpm();
+  const update = state.isHost
+    ? { host_progress: myProgressInt, host_wpm: myWpm }
+    : { guest_progress: myProgressInt, guest_wpm: myWpm };
+
+  await window.sb.from('rooms').update(update).eq('code', ROOM_CODE);
+}
+
+$('hiddenInput').addEventListener('input', e => {
+  if (!state.isRunning || state.isFinished) {
+    e.target.value = state.typed;
+    return;
+  }
+  const value = e.target.value;
+  const prev = state.typed;
+  if (value.length > prev.length) {
+    for (let i = prev.length; i < value.length; i++) {
+      state.totalKeys++;
+      if (value[i] === state.text[i]) state.correctKeys++;
+      else state.errors++;
+    }
+  }
+  state.typed = value;
+  if (state.typed.length > state.text.length) {
+    state.typed = state.typed.slice(0, state.text.length);
+    e.target.value = state.typed;
+  }
+  renderPrompt();
+  updateLocalProgress();
+  syncProgress();
+
+  if (state.typed === state.text) {
+    finish('win');
+  }
+});
+
+document.addEventListener('keydown', e => {
+  if (state.isRunning && document.activeElement !== $('hiddenInput')) {
+    $('hiddenInput').focus();
+  }
+});
+
+// ============ FINISH ============
+async function finish(verdict) {
+  if (state.isFinished) return;
+  state.isFinished = true;
+  state.isRunning = false;
+  state.endTime = Date.now();
+  clearInterval(state.ticker);
+  $('typingCard').classList.remove('focused');
+  updateHUD();
+
+  const myWpm = calcWpm();
+  const myAcc = calcAccuracy();
+
+  // 승리한 사람이 결과 기록
+  if (verdict === 'win') {
+    const winner = state.isHost ? 'host' : 'guest';
+    await window.sb
+      .from('rooms')
+      .update({ status: 'finished', winner: winner })
+      .eq('code', ROOM_CODE);
+  }
+
+  // matches 테이블에 본인 매치 기록 저장
+  if (!state.matchSaved) {
+    state.matchSaved = true;
+    try {
+      await window.sb.from('matches').insert({
+        user_id: Auth.user.id,
+        bot_id: 'pvp',
+        bot_name: state.isHost ? state.room.guest_nickname : state.room.host_nickname,
+        wpm: myWpm,
+        accuracy: myAcc,
+        result: verdict,
+        sentence: state.text
+      });
+    } catch (err) {
+      console.error('Save match error:', err);
+    }
+  }
+
+  // 결과 표시
+  const friendWpm = state.isHost ? state.room.guest_wpm : state.room.host_wpm;
+  const friendName = state.isHost ? state.room.guest_nickname : state.room.host_nickname;
+  const myName = state.isHost ? state.room.host_nickname : state.room.guest_nickname;
+
+  $('resultVerdict').textContent = verdict === 'win' ? 'VICTORY' : 'DEFEAT';
+  $('resultVerdict').classList.toggle('lose', verdict === 'lose');
+  $('resultCard').classList.toggle('lose', verdict === 'lose');
+  $('resultLabel').textContent = verdict === 'win' ? `${friendName} 격파!` : `${friendName} 에게 패배`;
+  $('resultMeName').textContent = myName;
+  $('resultMeWpm').textContent = myWpm;
+  $('resultMeAcc').textContent = myAcc + '%';
+  $('resultFriendName').textContent = friendName;
+  $('resultFriendWpm').textContent = friendWpm || 0;
+  $('resultOverlay').classList.add('show');
+}
+
+// ============ CONTROLS ============
+$('btnCopy').addEventListener('click', () => {
+  navigator.clipboard.writeText(state.room.code).then(() => {
+    showToast('방 코드가 복사되었습니다!');
+  });
+});
+
+$('btnLeave').addEventListener('click', async () => {
+  if (!confirm('방을 나가시겠습니까?')) return;
+  if (state.isHost) {
+    await window.sb.from('rooms').delete().eq('code', ROOM_CODE);
+  } else {
+    await window.sb.from('rooms').update({ guest_id: null, guest_nickname: null }).eq('code', ROOM_CODE);
+  }
+  window.location.href = 'multi.html';
+});
+
+$('btnRematch').addEventListener('click', () => {
+  window.location.href = 'multi.html';
+});
+
+$('btnHome').addEventListener('click', () => {
+  window.location.href = '../index.html';
+});
+
+// 페이지 닫을 때 정리
+window.addEventListener('beforeunload', () => {
+  if (state.channel) window.sb.removeChannel(state.channel);
+});
+</script>
+</body>
+</html>
