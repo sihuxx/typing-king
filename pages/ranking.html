@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>랭킹 — TYPING.KING</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Bungee&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../css/style.css" />
+</head>
+<body data-theme="dark">
+
+<div class="container">
+  <header class="header" id="header"></header>
+
+  <h1 class="page-title">RANKING</h1>
+  <p class="page-subtitle">전체 유저 WPM 순위</p>
+
+  <div class="chart-period" style="margin-bottom: 20px;">
+    <button class="active" data-period="best">최고 WPM</button>
+    <button data-period="week">주간 최고</button>
+    <button data-period="recent">최근 매치 WPM</button>
+  </div>
+
+  <div class="chart-card" style="padding: 16px 24px 24px;">
+    <div id="rankContent">
+      <div class="empty-state">
+        <div class="icon">⌛</div>
+        <div class="msg">랭킹을 불러오는 중...</div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="footer">TYPING.KING &nbsp;·&nbsp; GLOBAL LEADERBOARD</footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/supabase.js"></script>
+<script src="../js/auth.js"></script>
+
+<script>
+const $ = id => document.getElementById(id);
+let currentPeriod = 'best';
+
+(async function init() {
+  await initHeader('ranking');
+  await loadRanking('best');
+
+  document.querySelectorAll('.chart-period button').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      document.querySelectorAll('.chart-period button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentPeriod = btn.dataset.period;
+      await loadRanking(currentPeriod);
+    });
+  });
+})();
+
+async function loadRanking(period) {
+  $('rankContent').innerHTML = '<div class="empty-state"><div class="icon">⌛</div><div class="msg">로딩 중...</div></div>';
+
+  let rankings = [];
+
+  try {
+    if (period === 'best') {
+      // 프로필 테이블에서 최고 WPM 기준
+      const { data, error } = await window.sb
+        .from('profiles')
+        .select('id, nickname, best_wpm, total_matches, total_wins')
+        .gt('best_wpm', 0)
+        .order('best_wpm', { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      rankings = data.map(p => ({
+        userId: p.id,
+        nickname: p.nickname,
+        wpm: p.best_wpm,
+        matches: p.total_matches,
+        wins: p.total_wins
+      }));
+    } else if (period === 'week') {
+      // 최근 7일 내 최고 WPM
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const { data, error } = await window.sb
+        .from('matches')
+        .select('user_id, wpm, profiles(nickname)')
+        .gte('played_at', weekAgo)
+        .order('wpm', { ascending: false })
+        .limit(200);
+      if (error) throw error;
+
+      // user_id별 최고 WPM 집계
+      const grouped = {};
+      data.forEach(m => {
+        if (!grouped[m.user_id] || grouped[m.user_id].wpm < m.wpm) {
+          grouped[m.user_id] = {
+            userId: m.user_id,
+            nickname: m.profiles?.nickname || '???',
+            wpm: m.wpm
+          };
+        }
+      });
+      rankings = Object.values(grouped).sort((a, b) => b.wpm - a.wpm).slice(0, 50);
+    } else {
+      // 최근 매치 WPM 기준
+      const { data, error } = await window.sb
+        .from('matches')
+        .select('user_id, wpm, played_at, profiles(nickname)')
+        .order('wpm', { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      rankings = data.map(m => ({
+        userId: m.user_id,
+        nickname: m.profiles?.nickname || '???',
+        wpm: m.wpm,
+        playedAt: m.played_at
+      }));
+    }
+  } catch (err) {
+    $('rankContent').innerHTML = `<div class="empty-state"><div class="icon">✕</div><div class="msg">랭킹 로드 실패: ${err.message}</div></div>`;
+    return;
+  }
+
+  renderRankTable(rankings);
+}
+
+function renderRankTable(rankings) {
+  if (rankings.length === 0) {
+    $('rankContent').innerHTML = '<div class="empty-state"><div class="icon">🏆</div><div class="msg">아직 기록이 없습니다.<br>첫 1위가 되어보세요!</div></div>';
+    return;
+  }
+
+  const myId = Auth.user?.id;
+  let html = `
+    <table class="rank-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>닉네임</th>
+          <th>WPM</th>
+          <th style="text-align:right">${currentPeriod === 'best' ? '경기수' : ''}</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+
+  rankings.forEach((r, i) => {
+    const rank = i + 1;
+    const isMe = r.userId === myId;
+    const extraCol = currentPeriod === 'best'
+      ? `${r.matches || 0}경기 · 승률 ${r.matches ? Math.round((r.wins/r.matches)*100) : 0}%`
+      : r.playedAt ? new Date(r.playedAt).toLocaleDateString('ko-KR') : '';
+
+    html += `
+      <tr class="${isMe ? 'me' : ''}">
+        <td class="rank-num">${rank <= 3 ? ['🥇','🥈','🥉'][rank-1] : '#' + rank}</td>
+        <td class="rank-name">${escapeHtml(r.nickname)} ${isMe ? '<span style="color: var(--neon); font-size:10px; margin-left:6px;">(YOU)</span>' : ''}</td>
+        <td class="rank-wpm">${r.wpm}</td>
+        <td style="text-align:right; color: var(--text-dim); font-size: 11px;">${extraCol}</td>
+      </tr>`;
+  });
+
+  html += '</tbody></table>';
+  $('rankContent').innerHTML = html;
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+</script>
+</body>
+</html>

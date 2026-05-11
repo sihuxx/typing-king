@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TYPING.KING — AI 봇 대결</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Bungee&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body data-theme="dark">
+
+<div class="container">
+  <header class="header" id="header"></header>
+
+  <h2 class="section-title">SELECT YOUR OPPONENT</h2>
+  <div class="bot-grid" id="botGrid"></div>
+
+  <h2 class="section-title pink">BATTLE ARENA</h2>
+  <div class="race-track">
+    <div class="lane">
+      <div class="lane-label you">YOU ▶</div>
+      <div class="lane-bar"><div class="lane-fill" id="youFill" style="--lane-color: var(--neon)"></div><div class="lane-runner" id="youRunner" style="--lane-color: var(--neon)">U</div></div>
+      <div class="lane-pct you" id="youPct">0%</div>
+    </div>
+    <div class="lane">
+      <div class="lane-label bot" id="botLabel" style="--lane-color: #4ecdc4">◀ BOT</div>
+      <div class="lane-bar"><div class="lane-fill" id="botFill" style="--lane-color: #4ecdc4"></div><div class="lane-runner" id="botRunner" style="--lane-color: #4ecdc4">B</div></div>
+      <div class="lane-pct bot" id="botPct" style="--lane-color: #4ecdc4">0%</div>
+    </div>
+  </div>
+
+  <div class="hud">
+    <div class="stat neon"><div class="stat-label">YOUR WPM</div><div class="stat-value" id="statWpm">0<span class="stat-unit">w / m</span></div></div>
+    <div class="stat pink"><div class="stat-label">ACCURACY</div><div class="stat-value" id="statAcc">100<span class="stat-unit">%</span></div></div>
+    <div class="stat amber"><div class="stat-label">BOT WPM</div><div class="stat-value" id="statBotWpm">0<span class="stat-unit">w / m</span></div></div>
+    <div class="stat blue"><div class="stat-label">TIME</div><div class="stat-value" id="statTime">0<span class="stat-unit">s</span></div></div>
+  </div>
+
+  <div class="typing-card" id="typingCard" tabindex="0">
+    <div class="prompt-text" id="promptText"></div>
+    <div class="tap-hint" id="tapHint">▸ START 버튼을 눌러 대결 시작 또는 <kbd>Space</kbd></div>
+    <input type="text" class="input-capture" id="hiddenInput" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
+  </div>
+
+  <div class="controls">
+    <button class="btn primary" id="btnStart"><span class="arrow">▶</span> START BATTLE</button>
+    <button class="btn" id="btnNewText"><span class="arrow">⇄</span> 새 문장</button>
+    <button class="btn" id="btnReset"><span class="arrow">↻</span> 리셋</button>
+  </div>
+
+  <footer class="footer">Phase 3 / 3 &nbsp;·&nbsp; ACCOUNT + RECORDS &nbsp;·&nbsp; defeat them all</footer>
+</div>
+
+<div class="countdown" id="countdown"><div class="countdown-num" id="countdownNum">3</div></div>
+
+<div class="result-overlay" id="resultOverlay">
+  <div class="result-card" id="resultCard">
+    <div class="result-verdict" id="resultVerdict">VICTORY</div>
+    <div class="result-label" id="resultLabel">you crushed it</div>
+    <div class="result-vs">
+      <div class="result-player">
+        <div class="result-player-name">YOU</div>
+        <div class="result-player-wpm" id="resultYouWpm">0</div>
+        <div class="result-player-acc"><span id="resultYouAcc">0%</span> 정확도</div>
+      </div>
+      <div class="result-vs-mid">VS</div>
+      <div class="result-player bot">
+        <div class="result-player-name" id="resultBotName">BOT</div>
+        <div class="result-player-wpm" id="resultBotWpm">0</div>
+        <div class="result-player-acc">목표 WPM</div>
+      </div>
+    </div>
+    <div class="result-save-notice" id="resultSaveNotice">⌛ 기록을 저장하는 중...</div>
+    <div class="result-actions">
+      <button class="btn primary" id="btnPlayAgain">↻ 재대결</button>
+      <button class="btn" id="btnClose">✕ 닫기</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase.js"></script>
+<script src="js/auth.js"></script>
+
+<script>
+const BOTS = [
+  { id: 'turtle', name: 'TURTLE.01', avatar: 'T', color: '#4ecdc4', tagline: '느긋한 초보 봇. 가볍게 몸 풀기.', difficulty: 'EASY', wpm: 25, variance: 5 },
+  { id: 'rookie', name: 'ROOKIE.K', avatar: 'R', color: '#ffb347', tagline: '평균적인 학생 봇. 적당히 빠름.', difficulty: 'NORMAL', wpm: 45, variance: 7 },
+  { id: 'sharp', name: 'SHARP.X', avatar: 'S', color: '#ff2e88', tagline: '날카로운 직장인 봇. 꽤 빠르다.', difficulty: 'HARD', wpm: 70, variance: 10 },
+  { id: 'ninja', name: 'NINJA.Z', avatar: 'N', color: '#a855f7', tagline: '닌자 같은 속도. 만만치 않다.', difficulty: 'EXPERT', wpm: 95, variance: 12 },
+  { id: 'king', name: 'KING.∞', avatar: 'K', color: '#00ff9c', tagline: '타자왕 최종 보스. 진짜 빠름.', difficulty: 'GOD', wpm: 130, variance: 15 }
+];
+
+const SENTENCES = [
+  '시작은 새로운 것을 시도할 용기를 가진 자에게만 허락된다.',
+  '꿈을 향해 자신 있게 나아가고 상상해 온 삶을 살아라.',
+  '가장 큰 영광은 한 번도 실패하지 않음이 아니라 실패할 때마다 다시 일어서는 데에 있다.',
+  '오늘 할 수 있는 일에 전력을 다하라. 그러면 내일은 한 걸음 더 진보할 것이다.',
+  '인생은 자전거와 같다. 균형을 잡으려면 계속 움직여야 한다.',
+  '천 리 길도 한 걸음부터라는 말처럼 작은 시작이 큰 결과를 만든다.',
+  '실패는 성공의 어머니이며 모든 위대한 업적은 작은 노력이 모인 결과이다.',
+  '오늘 흘린 땀방울 하나가 내일의 너를 더 강하게 만든다.',
+  '서울시는 다음 달부터 시내 주요 도로에 자율주행 버스 시범 운행을 시작한다고 밝혔다.',
+  '국내 연구진이 차세대 배터리 핵심 소재 개발에 성공해 학계의 주목을 받고 있다.',
+  '바람이 부는 언덕에서 빨간 풍선 하나가 하늘 높이 떠올랐다 사라졌다.',
+  '카페에서 마신 따뜻한 아메리카노 한 잔이 오늘 하루의 피로를 녹여 주었다.',
+  '주말 오후 공원에서 강아지와 산책하는 시간이 가장 행복한 순간이다.',
+  '책장에 꽂혀 있던 오래된 일기장을 펼치자 잊고 있던 추억이 쏟아져 나왔다.',
+  '비 오는 날 창가에 앉아 빗소리를 듣는 것만큼 평화로운 일은 없다.'
+];
+
+let state = {
+  selectedBot: BOTS[0], text: '', typed: '', startTime: null, endTime: null,
+  errors: 0, totalKeys: 0, correctKeys: 0, ticker: null, countdownTimer: null,
+  isRunning: false, isFinished: false, isCountingDown: false,
+  botProgress: 0, botCharsTyped: 0
+};
+
+const $ = id => document.getElementById(id);
+const promptText = $('promptText'), hiddenInput = $('hiddenInput'), typingCard = $('typingCard');
+const tapHint = $('tapHint'), statWpm = $('statWpm'), statAcc = $('statAcc');
+const statBotWpm = $('statBotWpm'), statTime = $('statTime'), botGrid = $('botGrid');
+const youFill = $('youFill'), botFill = $('botFill'), youRunner = $('youRunner');
+const botRunner = $('botRunner'), youPct = $('youPct'), botPct = $('botPct');
+const botLabel = $('botLabel'), btnStart = $('btnStart');
+
+(async function init() {
+  await initHeader('play');
+  state.text = pickText();
+  renderBots();
+  updateBotLane();
+  reset();
+})();
+
+function renderBots() {
+  botGrid.innerHTML = '';
+  BOTS.forEach(bot => {
+    const card = document.createElement('div');
+    card.className = 'bot-card' + (bot.id === state.selectedBot.id ? ' selected' : '');
+    card.style.setProperty('--bot-color', bot.color);
+    card.innerHTML = `
+      <div class="bot-difficulty">${bot.difficulty}</div>
+      <div class="bot-avatar">${bot.avatar}</div>
+      <div class="bot-name">${bot.name}</div>
+      <div class="bot-tagline">${bot.tagline}</div>
+      <div class="bot-stats">
+        <div class="bot-stat"><span>목표 WPM</span><span>${bot.wpm}</span></div>
+        <div class="bot-stat"><span>변동폭</span><span>±${bot.variance}</span></div>
+      </div>`;
+    card.addEventListener('click', () => {
+      if (state.isRunning || state.isCountingDown) return;
+      state.selectedBot = bot;
+      renderBots();
+      updateBotLane();
+      reset();
+    });
+    botGrid.appendChild(card);
+  });
+}
+
+function updateBotLane() {
+  const c = state.selectedBot.color;
+  botFill.style.setProperty('--lane-color', c);
+  botRunner.style.setProperty('--lane-color', c);
+  botLabel.style.setProperty('--lane-color', c);
+  botPct.style.setProperty('--lane-color', c);
+  botRunner.textContent = state.selectedBot.avatar;
+  botLabel.textContent = `◀ ${state.selectedBot.name}`;
+}
+
+function pickText() {
+  let next;
+  do { next = SENTENCES[Math.floor(Math.random() * SENTENCES.length)]; }
+  while (next === state.text && SENTENCES.length > 1);
+  return next;
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+function renderPrompt() {
+  const chars = state.text.split('');
+  const typed = state.typed;
+  let html = '';
+  for (let i = 0; i < chars.length; i++) {
+    const ch = chars[i];
+    let cls = 'char';
+    if (i < typed.length) cls += typed[i] === ch ? ' correct' : ' wrong';
+    else if (i === typed.length) cls += ' current';
+    const display = ch === ' ' ? '&nbsp;' : escapeHtml(ch);
+    html += `<span class="${cls}">${display}</span>`;
+  }
+  promptText.innerHTML = html;
+}
+
+function calcWpm() {
+  if (!state.startTime) return 0;
+  const elapsedMs = (state.endTime || Date.now()) - state.startTime;
+  const elapsedMin = elapsedMs / 60000;
+  if (elapsedMin <= 0) return 0;
+  return Math.round((state.correctKeys / 5) / elapsedMin);
+}
+
+function calcAccuracy() {
+  if (state.totalKeys === 0) return 100;
+  return Math.round((state.correctKeys / state.totalKeys) * 100);
+}
+
+function calcBotWpm() {
+  if (!state.startTime || state.botCharsTyped === 0) return 0;
+  const elapsedMs = (state.endTime || Date.now()) - state.startTime;
+  const elapsedMin = elapsedMs / 60000;
+  if (elapsedMin <= 0) return 0;
+  return Math.round((state.botCharsTyped / 5) / elapsedMin);
+}
+
+function updateHUD() {
+  statWpm.innerHTML = `${calcWpm()}<span class="stat-unit">w / m</span>`;
+  statAcc.innerHTML = `${calcAccuracy()}<span class="stat-unit">%</span>`;
+  statBotWpm.innerHTML = `${calcBotWpm()}<span class="stat-unit">w / m</span>`;
+  const elapsed = state.startTime ? Math.floor((Date.now() - state.startTime) / 1000) : 0;
+  statTime.innerHTML = `${elapsed}<span class="stat-unit">s</span>`;
+  const youProgress = state.text.length > 0 ? Math.min(100, (state.typed.length / state.text.length) * 100) : 0;
+  const botProgress = Math.min(100, state.botProgress * 100);
+  youFill.style.width = youProgress + '%';
+  youRunner.style.left = youProgress + '%';
+  youPct.textContent = Math.round(youProgress) + '%';
+  botFill.style.width = botProgress + '%';
+  botRunner.style.left = botProgress + '%';
+  botPct.textContent = Math.round(botProgress) + '%';
+}
+
+function updateBot() {
+  if (!state.startTime || state.isFinished) return;
+  const elapsedSec = (Date.now() - state.startTime) / 1000;
+  const bot = state.selectedBot;
+  const targetCps = (bot.wpm * 5) / 60;
+  const varianceFactor = 1 + (Math.sin(elapsedSec * 1.3) * (bot.variance / bot.wpm) * 0.5);
+  state.botCharsTyped = targetCps * elapsedSec * varianceFactor;
+  state.botProgress = state.botCharsTyped / state.text.length;
+  if (state.botProgress >= 1) finish('lose');
+}
+
+function reset() {
+  if (state.ticker) clearInterval(state.ticker);
+  if (state.countdownTimer) clearInterval(state.countdownTimer);
+  if (!state.text) state.text = pickText();
+  Object.assign(state, {
+    typed: '', startTime: null, endTime: null, errors: 0, totalKeys: 0, correctKeys: 0,
+    isRunning: false, isFinished: false, isCountingDown: false, botProgress: 0, botCharsTyped: 0
+  });
+  hiddenInput.value = '';
+  renderPrompt();
+  updateHUD();
+  tapHint.classList.remove('hidden');
+  tapHint.innerHTML = '▸ START 버튼을 눌러 대결 시작 또는 <kbd>Space</kbd>';
+  $('resultOverlay').classList.remove('show');
+  $('countdown').classList.remove('show');
+  btnStart.disabled = false;
+  btnStart.innerHTML = '<span class="arrow">▶</span> START BATTLE';
+}
+
+function startCountdown() {
+  if (state.isRunning || state.isCountingDown) return;
+  state.isCountingDown = true;
+  btnStart.disabled = true;
+  tapHint.classList.add('hidden');
+  const countdownEl = $('countdown');
+  const countdownNum = $('countdownNum');
+  countdownEl.classList.add('show');
+  let count = 3;
+  countdownNum.textContent = count;
+  countdownNum.style.animation = 'none';
+  void countdownNum.offsetWidth;
+  countdownNum.style.animation = 'countPop 1s ease-out';
+
+  state.countdownTimer = setInterval(() => {
+    count--;
+    if (count > 0) {
+      countdownNum.textContent = count;
+      countdownNum.style.animation = 'none';
+      void countdownNum.offsetWidth;
+      countdownNum.style.animation = 'countPop 1s ease-out';
+    } else if (count === 0) {
+      countdownNum.textContent = 'GO!';
+      countdownNum.style.animation = 'none';
+      void countdownNum.offsetWidth;
+      countdownNum.style.animation = 'countPop 0.6s ease-out';
+    } else {
+      clearInterval(state.countdownTimer);
+      countdownEl.classList.remove('show');
+      state.isCountingDown = false;
+      beginRace();
+    }
+  }, 1000);
+}
+
+function beginRace() {
+  state.isRunning = true;
+  state.startTime = Date.now();
+  typingCard.classList.add('focused');
+  hiddenInput.focus();
+  state.ticker = setInterval(() => {
+    updateBot();
+    updateHUD();
+  }, 50);
+}
+
+async function finish(forcedResult) {
+  if (state.isFinished) return;
+  state.isFinished = true;
+  state.isRunning = false;
+  state.endTime = Date.now();
+  clearInterval(state.ticker);
+  typingCard.classList.remove('focused');
+  updateHUD();
+
+  const youWpm = calcWpm();
+  const youAcc = calcAccuracy();
+  const botWpm = state.selectedBot.wpm;
+
+  let verdict;
+  if (forcedResult === 'lose') verdict = 'lose';
+  else if (state.typed === state.text) verdict = 'win';
+  else verdict = 'lose';
+
+  showResult(verdict, youWpm, youAcc, botWpm);
+
+  // 로그인 상태면 매치 결과 저장
+  if (Auth.isLoggedIn() && youWpm > 0) {
+    await saveMatch(verdict, youWpm, youAcc);
+  } else {
+    const notice = $('resultSaveNotice');
+    notice.innerHTML = '💡 <a href="pages/login.html" style="color: var(--neon)">로그인</a> 하면 기록이 저장됩니다';
+    notice.classList.remove('saved');
+  }
+}
+
+async function saveMatch(verdict, wpm, accuracy) {
+  const notice = $('resultSaveNotice');
+  notice.textContent = '⌛ 기록을 저장하는 중...';
+  notice.classList.remove('saved');
+
+  try {
+    const { error } = await window.sb.from('matches').insert({
+      user_id: Auth.user.id,
+      bot_id: state.selectedBot.id,
+      bot_name: state.selectedBot.name,
+      wpm: wpm,
+      accuracy: accuracy,
+      result: verdict,
+      sentence: state.text
+    });
+    if (error) throw error;
+    notice.textContent = '✓ 기록이 저장되었습니다';
+    notice.classList.add('saved');
+  } catch (err) {
+    console.error('Save match error:', err);
+    notice.textContent = '✕ 저장에 실패했습니다';
+  }
+}
+
+function showResult(verdict, youWpm, youAcc, botWpm) {
+  const overlay = $('resultOverlay');
+  const card = $('resultCard');
+  const v = $('resultVerdict');
+  const label = $('resultLabel');
+  card.classList.remove('lose');
+  v.classList.remove('lose');
+
+  if (verdict === 'win') {
+    v.textContent = 'VICTORY';
+    label.textContent = `${state.selectedBot.name} 격파!`;
+  } else {
+    v.textContent = 'DEFEAT';
+    v.classList.add('lose');
+    card.classList.add('lose');
+    label.textContent = `${state.selectedBot.name} 에게 패배`;
+  }
+  $('resultYouWpm').textContent = youWpm;
+  $('resultYouAcc').textContent = youAcc + '%';
+  $('resultBotName').textContent = state.selectedBot.name;
+  $('resultBotWpm').textContent = botWpm;
+  document.querySelector('.result-player.bot').style.setProperty('--player-color', state.selectedBot.color);
+  overlay.classList.add('show');
+}
+
+function handleInput(value) {
+  if (!state.isRunning || state.isFinished) {
+    hiddenInput.value = state.typed;
+    return;
+  }
+  const prev = state.typed;
+  if (value.length > prev.length) {
+    for (let i = prev.length; i < value.length; i++) {
+      state.totalKeys++;
+      if (value[i] === state.text[i]) state.correctKeys++;
+      else state.errors++;
+    }
+  }
+  state.typed = value;
+  if (state.typed.length > state.text.length) {
+    state.typed = state.typed.slice(0, state.text.length);
+    hiddenInput.value = state.typed;
+  }
+  renderPrompt();
+  updateHUD();
+  if (state.typed === state.text) finish('win');
+}
+
+hiddenInput.addEventListener('input', e => handleInput(e.target.value));
+
+typingCard.addEventListener('click', () => {
+  if (state.isRunning) hiddenInput.focus();
+});
+
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && !state.isRunning && !state.isCountingDown && !state.isFinished) {
+    e.preventDefault();
+    startCountdown();
+    return;
+  }
+  if (state.isRunning && document.activeElement !== hiddenInput) {
+    hiddenInput.focus();
+  }
+});
+
+btnStart.addEventListener('click', startCountdown);
+$('btnNewText').addEventListener('click', () => {
+  if (state.isRunning || state.isCountingDown) return;
+  state.text = pickText();
+  state.typed = '';
+  hiddenInput.value = '';
+  renderPrompt();
+});
+$('btnReset').addEventListener('click', reset);
+$('btnPlayAgain').addEventListener('click', () => {
+  $('resultOverlay').classList.remove('show');
+  state.text = pickText();
+  reset();
+});
+$('btnClose').addEventListener('click', () => {
+  $('resultOverlay').classList.remove('show');
+});
+</script>
+</body>
+</html>
