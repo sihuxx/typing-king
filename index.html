@@ -301,7 +301,13 @@ function calcWpm() {
   const elapsedMs = (state.endTime || Date.now()) - state.startTime;
   const elapsedMin = elapsedMs / 60000;
   if (elapsedMin <= 0) return 0;
-  return Math.round((state.correctKeys / 5) / elapsedMin);
+  // 한국어 기준: 타이핑한 어절(띄어쓰기 단위) 수로 WPM 계산
+  // 정확하게 입력한 글자 중 공백 포함 어절을 추정 (글자수 / 2.5 = 평균 어절수)
+  const typedCorrect = state.typed.slice(0, state.correctKeys);
+  const wordCount = typedCorrect.trim()
+    ? typedCorrect.trim().split(/\s+/).length
+    : 0;
+  return Math.round(wordCount / elapsedMin);
 }
 
 function calcAccuracy() {
@@ -314,7 +320,9 @@ function calcBotWpm() {
   const elapsedMs = (state.endTime || Date.now()) - state.startTime;
   const elapsedMin = elapsedMs / 60000;
   if (elapsedMin <= 0) return 0;
-  return Math.round((state.botCharsTyped / 5) / elapsedMin);
+  // 봇도 한국어 어절 기준 (평균 어절 2.5글자)
+  const botWords = state.botCharsTyped / 2.5;
+  return Math.round(botWords / elapsedMin);
 }
 
 function updateHUD() {
